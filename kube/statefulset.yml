@@ -1,0 +1,89 @@
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: mongod
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: mongo
+        role: mongo
+        replicaset: rs0
+      annotations:
+        scheduler.alpha.kubernetes.io/affinity: >
+          {
+            "podAffinity": {
+              "requiredDuringSchedulingRequiredDuringExecution": [{
+                "labelSelector": {
+                  "matchExpressions": [{
+                    "key": "replicaset",
+                    "operator": "NotIn",
+                    "values": ["rs0"]
+                  }]
+                },
+                "namespaces": "database",
+                "topologyKey": "kubernetes.io/hostname"
+              }]
+            }
+          }
+    spec:
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: secrets-volume
+          secret:
+            secretName: mongo-shared-secret
+            defaultMode: 256
+      containers:
+      - name: mongo
+        image: mongo:3.4
+        command:
+            - "mongod"
+            - "--replSet"
+            - "rs0"
+            - "--wiredTigerCacheSizeGB"
+            - '1'
+            - "--auth"
+            - "--clusterAuthMode"
+            - "keyFile"
+            - "--keyFile"
+            - "/etc/secrets-volume/internal-auth-mongo-keyfile"
+            - "--setParameter"
+            - "authenticationMechanisms=SCRAM-SHA-1"
+        ports:
+          - containerPort: 27017
+            name: mongo-port
+        volumeMounts:
+          - name: secrets-volume
+            readOnly: true
+            mountPath: /etc/secrets-volume
+          - name: mongo-pvc
+            mountPath: /data/db
+        resources:
+          limits:
+            cpu: 200m
+            memory: 500Mi
+        readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "/usr/bin/mongo --eval 'printjson(db.serverStatus())'"
+            initialDelaySeconds: 5
+            timeoutSeconds: 5    
+                 
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-pvc
+      labels:
+        type: amazonEBS
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "awsebs"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 30Gi

@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-watcher
+spec:
+  template:
+    metadata:
+      name: mongo-watcher
+    spec:
+      containers:
+      - name: mongo-watcher
+        image: 274709190364.dkr.ecr.ap-southeast-1.amazonaws.com/om.mongo-watcher:latest
+        command: ["/mongo-watch.sh"]
+      restartPolicy: OnFailure
